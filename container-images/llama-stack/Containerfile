@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:42
+FROM registry.access.redhat.com/ubi10-beta/ubi:10.0-beta-1741674993
 
 ARG RAMALAMA_STACK_VERSION=0.2.4
 
@@ -8,11 +8,15 @@ RUN curl --create-dirs --output ~/.llama/providers.d/remote/inference/ramalama.y
     curl --create-dirs --output /etc/ramalama/ramalama-run.yaml https://raw.githubusercontent.com/containers/ramalama-stack/refs/tags/v${RAMALAMA_STACK_VERSION}/src/ramalama_stack/ramalama-run.yaml
 
 RUN dnf -y update && \
-    dnf -y install uv cmake gcc gcc-c++ python3-devel pkg-config sentencepiece-devel && \
+    dnf -y install cmake gcc gcc-c++ python3-devel pkg-config && \
     dnf -y clean all
 
-RUN uv venv && \
-    uv pip install ramalama-stack==${RAMALAMA_STACK_VERSION}
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN source $HOME/.local/bin/env
+
+RUN $HOME/.local/bin/uv venv && \
+    $HOME/.local/bin/uv pip install sentencepiece && \
+    $HOME/.local/bin/uv pip install ramalama-stack==${RAMALAMA_STACK_VERSION}
 
 COPY --chmod=755 container-images/llama-stack/entrypoint.sh /usr/bin/entrypoint.sh
 
