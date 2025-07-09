@@ -77,19 +77,31 @@ dnf_install_s390() {
 }
 
 add_stream_repo() {
-  local url="https://mirror.stream.centos.org/9-stream/$1/$uname_m/os/"
-  dnf config-manager --add-repo "$url"
-  url="http://mirror.centos.org/centos/RPM-GPG-KEY-CentOS-Official"
-  local file="/etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-Official"
-  if [ ! -e $file ]; then
-    curl --retry 8 --retry-all-errors -o $file "$url"
-    rpm --import $file
+  local version
+  if [[ "${VERSION_ID}" == "10"* ]]; then
+    version="10-stream"
+  else
+    version="9-stream"
   fi
+  
+  local url="https://mirror.stream.centos.org/${version}/$1/$uname_m/os/"
+  local repo_name="centos-stream-${version}-$(echo $1 | tr '[:upper:]' '[:lower:]')"
+  
+  # Create repo file with GPG checking disabled
+  cat > "/etc/yum.repos.d/${repo_name}.repo" << EOF
+[${repo_name}]
+name=CentOS Stream ${version} - $1
+baseurl=${url}
+enabled=1
+gpgcheck=0
+EOF
+  
+  echo "Added CentOS Stream ${version} $1 repository without GPG checking"
 }
 
 rm_non_ubi_repos() {
   local dir="/etc/yum.repos.d"
-  rm -rf $dir/mirror.stream.centos.org_9-stream_* $dir/epel*
+  rm -rf $dir/mirror.stream.centos.org_*-stream_* $dir/epel* $dir/centos-stream-*
 }
 
 is_rhel_based() { # doesn't include openEuler
@@ -97,12 +109,51 @@ is_rhel_based() { # doesn't include openEuler
 }
 
 dnf_install_mesa() {
+  echo "DEBUG: Starting dnf_install_mesa function. ID=${ID}, VERSION_ID=${VERSION_ID}"
   if [ "${ID}" = "fedora" ]; then
     dnf copr enable -y slp/mesa-libkrun-vulkan
     dnf install -y mesa-vulkan-drivers-25.0.7-100.fc42 "${vulkan_rpms[@]}"
     dnf versionlock add mesa-vulkan-drivers-25.0.7-100.fc42
   else
-    dnf install -y mesa-vulkan-drivers "${vulkan_rpms[@]}"
+    # For UBI 10, try multiple repository sources for Vulkan packages
+    if [[ "${VERSION_ID}" == "10"* ]]; then
+      echo "DEBUG: Trying to install Vulkan packages: mesa-vulkan-drivers ${vulkan_rpms[@]}"
+      
+      # Try installing packages individually to see which ones are available
+      echo "DEBUG: Trying individual package installation..."
+      
+      # Add all repositories first
+      add_stream_repo "AppStream"
+      add_stream_repo "BaseOS"
+      dnf_install_epel
+      
+      echo "DEBUG: Available Vulkan-related packages:"
+      dnf search vulkan 2>/dev/null || echo "No vulkan packages found"
+      echo "DEBUG: Available Mesa packages:"
+      dnf search mesa 2>/dev/null || echo "No mesa packages found"
+      echo "DEBUG: Available shader compiler packages:"
+      dnf search shaderc glslc spirv 2>/dev/null || echo "No shader packages found"
+      
+      # Try to install each package individually
+      # First try the expected packages
+      for pkg in mesa-vulkan-drivers "${vulkan_rpms[@]}"; do
+        echo "DEBUG: Attempting to install $pkg"
+        dnf install -y "$pkg" || echo "DEBUG: Failed to install $pkg"
+      done
+      
+      # Try alternative package names that might exist
+      echo "DEBUG: Trying alternative package names..."
+      alternative_pkgs=("mesa-dri-drivers" "mesa-libGL-devel" "mesa-vulkan-radeon" "mesa-vulkan-intel" "libvulkan1" "libvulkan-dev")
+      for pkg in "${alternative_pkgs[@]}"; do
+        echo "DEBUG: Attempting to install alternative package $pkg"
+        dnf install -y "$pkg" || echo "DEBUG: Failed to install alternative package $pkg"
+      done
+      
+      echo "DEBUG: Checking what Vulkan-related files exist on system after installation:"
+      find /usr -name "*vulkan*" -o -name "*glslc*" -o -name "*shaderc*" 2>/dev/null || echo "No Vulkan files found"
+    else
+      dnf install -y mesa-vulkan-drivers "${vulkan_rpms[@]}"
+    fi
   fi
 
   rm_non_ubi_repos
@@ -110,7 +161,13 @@ dnf_install_mesa() {
 
 dnf_install_epel() {
   local rpm_exclude_list="selinux-policy,container-selinux"
-  local url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+  local version
+  if [[ "${VERSION_ID}" == "10"* ]]; then
+    version="10"
+  else
+    version="9"
+  fi
+  local url="https://dl.fedoraproject.org/pub/epel/epel-release-latest-${version}.noarch.rpm"
   dnf reinstall -y "$url" || dnf install -y "$url" --exclude "${rpm_exclude_list}"
   crb enable # this is in epel-release, can only install epel-release via url
 }
@@ -140,10 +197,11 @@ dnf_install() {
     "${PYTHON}-devel" "gcc-c++" "cmake" "vim" "procps-ng" "git-core"
     "dnf-plugins-core" "libcurl-devel" "gawk")
   local vulkan_rpms=("vulkan-headers" "vulkan-loader-devel" "vulkan-tools"
-    "spirv-tools" "glslc" "glslang")
+    "spirv-tools" "glslc" "glslang" "vulkan-devel" "vulkan-loader" 
+    "shaderc" "shaderc-devel")
   if is_rhel_based; then
     dnf_install_epel # All the UBI-based ones
-    dnf --enablerepo=ubi-9-appstream-rpms install -y "${rpm_list[@]}" --exclude "${rpm_exclude_list}"
+    dnf --enablerepo=ubi-10-appstream-rpms install -y "${rpm_list[@]}" --exclude "${rpm_exclude_list}"
   else
     dnf install -y "${rpm_list[@]}" --exclude "${rpm_exclude_list}"
   fi
@@ -152,8 +210,11 @@ dnf_install() {
   fi
   if [ "$containerfile" = "ramalama" ]; then
     if [ "$uname_m" = "x86_64" ] || [ "$uname_m" = "aarch64" ]; then
+      echo "DEBUG: About to call dnf_install_mesa for containerfile=$containerfile, uname_m=$uname_m"
       dnf_install_mesa # on x86_64 and aarch64 we use vulkan via mesa
+      echo "DEBUG: Finished dnf_install_mesa"
     else
+      echo "DEBUG: Installing s390 packages for uname_m=$uname_m"
       dnf_install_s390
     fi
   elif [[ "$containerfile" =~ rocm* ]]; then

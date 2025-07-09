@@ -16,7 +16,8 @@ RUN source $HOME/.local/bin/env
 
 RUN $HOME/.local/bin/uv venv && \
     $HOME/.local/bin/uv pip install sentencepiece && \
-    $HOME/.local/bin/uv pip install ramalama-stack==${RAMALAMA_STACK_VERSION}
+    $HOME/.local/bin/uv pip install ramalama-stack==${RAMALAMA_STACK_VERSION} && \
+    $HOME/.local/bin/uv pip install psycopg2-binary
 
 COPY --chmod=755 container-images/llama-stack/entrypoint.sh /usr/bin/entrypoint.sh
 
