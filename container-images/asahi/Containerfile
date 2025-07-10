@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10-beta/ubi:10.0-beta-1741674993
+FROM registry.access.redhat.com/ubi10/ubi:10.0-1752072735
 
 ENV ASAHI_VISIBLE_DEVICES 1
 COPY . /src/ramalama
