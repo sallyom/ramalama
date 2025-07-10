@@ -12,9 +12,6 @@ spec:
     ports:
     - containerPort: 5432
       hostPort: 5432
-    securityContext:
-      seLinuxOptions:
-        type: spc_t
     env:
     - name: POSTGRES_USER
       value: postgres
@@ -27,8 +24,9 @@ spec:
     - name: POSTGRES_DBNAME
       value: rag_blueprint
     volumeMounts:
-    - name: init-sql
+    - name: pgvector-init
       mountPath: /docker-entrypoint-initdb.d/init-db.sh
+      subPath: init-db.sh
       readOnly: true
     - name: pg-data
       mountPath: /var/lib/postgresql/data
@@ -53,9 +51,6 @@ spec:
     ports:
     - containerPort: 8321
       hostPort: 8321
-    securityContext:
-      seLinuxOptions:
-        type: spc_t
     env:
     - name: POSTGRES_HOST
       value: "127.0.0.1"
@@ -76,8 +71,9 @@ spec:
     - name: SQLITE_STORE_DIR
       value: "/tmp/llama-stack"
     volumeMounts:
-    - name: config
+    - name: llama-stack-config
       mountPath: /etc/ramalama/ramalama-run.yaml
+      subPath: ramalama-run.yaml
       readOnly: true
     - name: llama-stack-data
       mountPath: /tmp/llama-stack
@@ -102,9 +98,6 @@ spec:
     ports:
     - containerPort: 8080
       hostPort: 8080
-    securityContext:
-      seLinuxOptions:
-        type: spc_t
     command:
     - ramalama
     - serve
@@ -130,9 +123,6 @@ spec:
     ports:
     - containerPort: 8501
       hostPort: 8501
-    securityContext:
-      seLinuxOptions:
-        type: spc_t
     env:
     - name: LLAMA_STACK_ENDPOINT
       value: "http://localhost:8321"
@@ -145,12 +135,13 @@ spec:
         cpu: "500m"
 
   volumes:
-  - name: init-sql
-    hostPath:
-      path: /Users/somalley/git/containers/ramalama/examples/llama-stack-pgvector/init-db.sh
-  - name: config
-    hostPath:
-      path: /Users/somalley/git/containers/ramalama/examples/llama-stack-pgvector/ramalama-run.yaml
+  - name: llama-stack-config
+    configMap:
+      name: llama-stack-config
+  - name: pgvector-init
+    configMap:
+      name: pgvector-init
+      defaultMode: 0755
   - name: pg-data
     emptyDir: {}
   - name: llama-stack-data

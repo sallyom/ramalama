@@ -1,17 +1,59 @@
 # RamaLama Stack with PGVector
 
-This example demonstrates how to run RamaLama Stack with PGVector as the vector database for RAG (Retrieval-Augmented Generation) instead of the default Milvus.
+This example demonstrates how to run RamaLama Stack with PGVector as the vector database for RAG.
 
 ## Overview
 
-This setup creates a podman pod with three containers:
+This setup creates a podman pod with four containers:
 - **PGVector**: PostgreSQL database with pgvector extension for vector storage
-- **RamaLama Model Server**: Serves the LLM model (Llama-3.2-3B-Instruct by default)
+- **RamaLama Model Server**: Serves the LLM model
 - **Llama Stack**: The main API server that orchestrates all components
+- **Streamlit UI**: Optional web interface for interacting with the RAG stack
 
 ## Quick Start
 
-### Option 1: Using podman-commands.sh
+### Option 1: Using podman kube play
+
+#### Option 1a: With ConfigMap
+```bash
+# Start all services including UI with ConfigMap for llama-stack run configuration
+podman kube play --configmap configmap.yaml pod-with-configmap.yaml
+
+# Check status
+podman ps
+
+# View logs
+podman logs llama-stack-pgvector-pgvector
+podman logs llama-stack-pgvector-ramalama-model
+podman logs llama-stack-pgvector-llama-stack
+podman logs llama-stack-pgvector-ui
+
+# Stop all services
+podman kube down pod-with-configmap.yaml
+```
+
+#### Option 1b: With hostPath volumes (requires SELinux context confg)
+```bash
+# Start all services including UI
+podman kube play pod.yaml
+
+# Check status
+podman ps
+
+# View logs
+podman logs llama-stack-pgvector-pgvector
+podman logs llama-stack-pgvector-ramalama-model
+podman logs llama-stack-pgvector-llama-stack
+podman logs llama-stack-pgvector-ui
+
+# Stop all services
+podman kube down pod.yaml
+```
+
+**Note:** The `podman kube play` method starts all services including the UI in a single command. All deployment methods expose the same ports and provide
+identical functionality. With Option 2 below, you have the option of deploying without the added UI, and can add it after starting the main pod.
+
+### Option 2: Using podman-commands.sh
 
 The `podman-commands.sh` script provides several commands:
 
@@ -40,27 +82,6 @@ The `podman-commands.sh` script provides several commands:
 ./podman-commands.sh test
 ```
 
-### Option 2: Using podman kube play
-
-```bash
-# Start all services including UI
-podman kube play pod.yaml
-
-# Check status
-podman ps
-
-# View logs
-podman logs llama-stack-pgvector-pgvector
-podman logs llama-stack-pgvector-ramalama-model
-podman logs llama-stack-pgvector-llama-stack
-podman logs llama-stack-pgvector-ui
-
-# Stop all services
-podman kube down pod.yaml
-```
-
-**Note:** The `podman kube play` method starts all services including the UI in a single command. Both methods expose the same ports and provide identical functionality.
-
 ## Configuration
 
 ### Default Configuration
@@ -76,12 +97,6 @@ The setup uses the following default configuration:
 - **RamaLama Model Server:**
   - Model: `tinyllama`
   - Port: `8080`
-
-- **Llama Stack API:**
-  - Port: `8321`
-
-- **Streamlit UI (optional):**
-  - Port: `8501`
 
 ### Customization
 
@@ -99,12 +114,11 @@ INFERENCE_MODEL="tinyllama"
 - `ramalama-run.yaml` - Modified Llama Stack configuration using PGVector
 - `podman-commands.sh` - Main script to manage the pod and containers
 - `init-db.sh` - Database initialization script
-- `pod.yaml` - Kubernetes-style pod definition for `podman kube play`
-- `configmap.yaml` - Kubernetes ConfigMap (reference)
+- `pod.yaml` - Kubernetes-style pod definition with hostPath volumes
+- `pod-with-configmap.yaml` - Kubernetes-style pod definition using ConfigMap for llama-stack run config
+- `configmap.yaml` - Kubernetes ConfigMap containing llama-stack run config
 
 ## Usage
-
-### Starting the Services
 
 ### Service Endpoints
 
@@ -113,7 +127,7 @@ Once running, the following endpoints are available:
 - **PGVector Database:** `localhost:5432`
 - **RamaLama Model Server:** `localhost:8080`
 - **Llama Stack API:** `localhost:8321`
-- **Streamlit UI:** `localhost:8501` (when started with `start-ui`)
+- **Streamlit UI:** `localhost:8501`
 
 ### Testing the Setup
 
@@ -132,8 +146,8 @@ podman exec llama-stack-pgvector-pgvector psql -U postgres -d rag_blueprint -c "
 # Test RamaLama model server
 curl http://localhost:8080/health
 
-# Test Llama Stack API
-curl http://localhost:8321/health
+# Test Llama Stack
+curl http://localhost:8321/v1/models
 ```
 
 ## Architecture
@@ -141,39 +155,23 @@ curl http://localhost:8321/health
 The setup creates a single podman pod with shared networking, allowing containers to communicate via localhost. The architecture is:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                 Podman Pod                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
-│  │  PGVector   │  │  RamaLama   │  │ Llama Stack │  │
-│  │   :5432     │  │   :8080     │  │   :8321     │  │
-│  └─────────────┘  └─────────────┘  └─────────────┘  │
-│                                                     │
-│  Shared Network: localhost                          │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Podman Pod                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │  PGVector   │  │  RamaLama   │  │ Llama Stack │  │ Streamlit   │ │
+│  │   :5432     │  │   :8080     │  │   :8321     │  │ UI :8501    │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
+│                                                     │               │
+│  Shared Network: localhost                          │   (optional)  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
-
-## Integration
-
-### Using with RAG
-
-The setup is ready for RAG applications. The Llama Stack API provides endpoints for:
-
-- Document ingestion and embedding
-- Vector similarity search
-- Question answering with context
 
 ### Web UI
 
-The Streamlit UI provides a user-friendly interface to interact with your RAG stack:
+The Streamlit UI provides a user-friendly interface to interact with your RAG stack.
 
-```bash
-# Start the main services
-./podman-commands.sh start
-
-# Start the web UI (in a separate terminal)
-./podman-commands.sh start-ui
-
-# Access the UI at: http://localhost:8501
+```
+Access the UI at: http://localhost:8501
 ```
 
 ### API Examples
@@ -184,11 +182,11 @@ After starting the services, you can interact with the Llama Stack API:
 import requests
 
 # Example: Health check
-response = requests.get('http://localhost:8321/health')
+response = requests.get('http://localhost:8080/health')
 print(response.json())
 
 # Example: List available models
-response = requests.get('http://localhost:8321/models')
+response = requests.get('http://localhost:8321/v1/models')
 print(response.json())
 ```
 
@@ -199,5 +197,29 @@ To enable additional features like web search, set environment variables before 
 ```bash
 # Enable Tavily search functionality
 export TAVILY_SEARCH_API_KEY="your_tavily_api_key"
-./podman-commands.sh start
+```
+
+## Building Images from Source
+
+If you need to build the container images yourself from the ramalama repository:
+
+### Building ramalama-stack Image
+```bash
+# From the ramalama repository root
+podman build -t quay.io/sallyom/ramalama-stack:ubi10 -f container-images/llama-stack/Containerfile .
+```
+
+### Building ramalama Image
+```bash
+# From the ramalama repository root
+REGISTRY_PATH=quay.io/sallyom make build IMAGE=ramalama
+```
+### Building the UI Image
+```bash
+# Clone the llama-stack repository
+git clone https://github.com/meta-llama/llama-stack
+cd llama-stack/llama_stack/distributions/ui
+
+# Build the UI image
+podman build -t ramalama-stack:ui .
 ```
