@@ -114,7 +114,7 @@ run_ramalama_model() {
         --name "${POD_NAME}-ramalama" \
         --pod "$POD_NAME" \
         --env RAMALAMA_PORT="$RAMALAMA_PORT" \
-        quay.io/sallyom/ramalama:latest \
+        quay.io/sallyom/ramalama:ubi10 \
         ramalama serve --port="$RAMALAMA_PORT" --host=0.0.0.0 "$INFERENCE_MODEL"
 }
 
@@ -302,7 +302,7 @@ EOF
         --env TAVILY_SEARCH_API_KEY="${TAVILY_SEARCH_API_KEY:-}" \
         --volume "$TEMP_DIR/ramalama-run.yaml:/etc/ramalama/ramalama-run.yaml:ro" \
         --volume llama-stack-data:/tmp/llama-stack \
-        quay.io/sallyom/ramalama-stack:latest
+        quay.io/sallyom/ramalama-stack:ubi10
 }
 
 # Function to start UI

@@ -46,7 +46,7 @@ spec:
         cpu: "500m"
   
   - name: llama-stack
-    image: quay.io/sallyom/ramalama-stack:latest
+    image: quay.io/sallyom/ramalama-stack:ubi10
     ports:
     - containerPort: 8321
       hostPort: 8321
@@ -92,7 +92,7 @@ spec:
         cpu: "1000m"
 
   - name: ramalama-model
-    image: quay.io/sallyom/ramalama:latest
+    image: quay.io/sallyom/ramalama:ubi10
     ports:
     - containerPort: 8080
       hostPort: 8080
