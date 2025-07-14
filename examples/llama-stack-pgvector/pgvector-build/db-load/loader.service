@@ -1,0 +1,15 @@
+[Unit]
+Description=Load the database
+After=postgresql-17.service
+Wants=postgresql-17.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/loader.sh
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,45 @@
+FROM registry.access.redhat.com/ubi10/ubi:latest AS base
+
+# Before building this image, you must provide a ragdb.dump file 
+COPY ragdb.dump /tmp/ragdb.dump
+COPY db-load/loader.sh /usr/local/bin/loader.sh
+COPY db-load/loader.service /etc/systemd/system
+
+# This directory is checked by ecosystem-cert-preflight-checks task in Konflux.
+RUN mkdir /licenses
+COPY LICENSE /licenses/
+
+# Install PostgreSQL 17 so the client and server versions match.
+RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm \
+    && dnf install -y postgresql17-server pgvector_17 \
+    && dnf clean all
+
+# Environment variables for database configuration
+ENV RAG_DATABASE_TAG ragdb
+ENV DB_HOST 127.0.0.1
+ENV DB_PORT 5432
+ENV DB_USER postgres
+ENV DB_PASSWORD postgres
+
+# Set up PostgreSQL directories and permissions
+RUN mkdir -p /var/lib/pgsql/17/data \
+    && chown -R postgres:postgres /var/lib/pgsql \
+    && chmod 700 /var/lib/pgsql/17/data
+
+# Initialize PostgreSQL database with environment variables
+RUN su - postgres -c "/usr/pgsql-17/bin/initdb -D /var/lib/pgsql/17/data --auth-local=peer --auth-host=md5 --username=${DB_USER}"
+
+# Configure PostgreSQL to use environment variables
+RUN echo "host all all 0.0.0.0/0 md5" >> /var/lib/pgsql/17/data/pg_hba.conf \
+    && echo "listen_addresses = '*'" >> /var/lib/pgsql/17/data/postgresql.conf \
+    && echo "port = ${DB_PORT}" >> /var/lib/pgsql/17/data/postgresql.conf
+
+# Set up systemd service
+RUN systemctl enable postgresql-17 \
+    && systemctl enable loader.service
+
+# Make loader script executable
+RUN chmod +x /usr/local/bin/loader.sh
+
+STOPSIGNAL SIGRTMIN+3
+CMD [ "/sbin/init" ]

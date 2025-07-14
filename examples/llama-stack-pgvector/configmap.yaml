@@ -118,9 +118,9 @@ data:
         config:
           host: ${env.POSTGRES_HOST:=127.0.0.1}
           port: ${env.POSTGRES_PORT:=5432}
-          db: ${env.PGVECTOR_DBNAME:=rag_blueprint}
+          db: ${env.PGVECTOR_DBNAME:=ragdb}
           user: ${env.POSTGRES_USER:=postgres}
-          password: ${env.POSTGRES_PASSWORD:=rag_password}
+          password: ${env.POSTGRES_PASSWORD:=postgres}
     metadata_store:
       type: sqlite
       db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/ramalama}/registry.db
@@ -138,7 +138,12 @@ data:
       provider_id: sentence-transformers
       model_type: embedding
     shields: []
-    vector_dbs: []
+    vector_dbs:
+    - vector_db_id: ragdb
+      provider_id: pgvector
+      provider_type: remote::pgvector
+      embedding_model: all-MiniLM-L6-v2
+      embedding_dimension: 384
     datasets: []
     scoring_fns: []
     benchmarks: []
@@ -152,29 +157,3 @@ data:
     server:
       port: 8321
     external_providers_dir: ${env.EXTERNAL_PROVIDERS_DIR:=~/.llama/providers.d}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: pgvector-init
-data:
-  init-db.sh: |
-    #!/bin/bash
-    set -e
-
-    # Create the database and enable vector extension
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-        CREATE EXTENSION IF NOT EXISTS vector;
-        
-        -- Grant necessary permissions
-        GRANT ALL PRIVILEGES ON DATABASE $POSTGRES_DB TO $POSTGRES_USER;
-        
-        -- Create a table for testing vector operations (optional)
-        CREATE TABLE IF NOT EXISTS embeddings (
-            id SERIAL PRIMARY KEY,
-            content TEXT,
-            embedding VECTOR(384)
-        );
-    EOSQL
-
-    echo "PGVector database initialized successfully"

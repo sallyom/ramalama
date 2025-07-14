@@ -132,7 +132,12 @@ models:
   provider_id: sentence-transformers
   model_type: embedding
 shields: []
-vector_dbs: []
+vector_dbs:
+- vector_db_id: ragdb
+  provider_id: pgvector
+  provider_type: remote::pgvector
+  embedding_model: all-MiniLM-L6-v2
+  embedding_dimension: 384
 datasets: []
 scoring_fns: []
 benchmarks: []
